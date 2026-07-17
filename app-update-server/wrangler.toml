@@ -1,0 +1,41 @@
+# Default environment (dev)
+name = "version-server-dev"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-01-01"
+
+[build]
+command = "cargo install -q worker-build && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true worker-build --release"
+
+[[routes]]
+pattern = "dev.cyypher.com"
+custom_domain = true
+
+[[r2_buckets]]
+binding = "version-server-r2"
+bucket_name = "version-server-r2"
+
+[[d1_databases]]
+binding = "version-server-d1"
+database_name = "version-server-d1"
+database_id = "4ecd1cfa-2e13-4865-98c3-2eefc40f580c"
+migrations_dir = "migrations"
+
+# Production environment
+[env.production]
+name = "version-server-prod"
+
+[[env.production.routes]]
+pattern = "apps.cyypher.com"
+custom_domain = true
+
+[[env.production.r2_buckets]]
+binding = "version-server-r2"
+bucket_name = "version-server-r2-prod"
+
+[[env.production.d1_databases]]
+binding = "version-server-d1"
+database_name = "version-server-d1-prod"
+database_id = "a9549ea1-1eb3-420d-8b36-d3d8f3070ad8"
+migrations_dir = "migrations"
+
+

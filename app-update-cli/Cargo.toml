@@ -1,0 +1,13 @@
+[package]
+name = "app-update-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+app-update-client = { path = "../app-update-client" }
+app-update-models = { path = "../app-update-models" }
+clap = { version = "4.0", features = ["derive", "env"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+anyhow = "1.0"
+dotenv = "0.15"
+

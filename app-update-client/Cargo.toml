@@ -1,0 +1,15 @@
+[package]
+name = "app-update-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+app-update = { path = "../app-update" }
+app-update-models = { path = "../app-update-models" }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+semver = "1"
+thiserror = "1.0"
+sha2 = "0.10"

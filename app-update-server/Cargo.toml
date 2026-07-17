@@ -1,0 +1,19 @@
+[package]
+name = "app-update-server"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.release]
+release = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+worker = { version = "0.6", features = ["d1", "http"] }
+app-update-models = { path = "../app-update-models" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+semver = "1.0"
+
