@@ -32,7 +32,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
           workingDirectory: app-update-server
-          preCommands: ${{ inputs.environment == 'production' && 'd1 migrations apply version-server-d1 --remote --env production' || 'd1 migrations apply version-server-d1 --remote' }}
+          preCommands: ${{ inputs.environment == 'production' && 'wrangler d1 migrations apply version-server-d1 --remote --env production' || 'wrangler d1 migrations apply version-server-d1 --remote' }}
           command: ${{ inputs.environment == 'production' && 'deploy --env production' || 'deploy' }}
           environment: ${{ inputs.environment == 'production' && 'production' || '' }}
           secrets: |
