@@ -1,12 +1,11 @@
 use semver::Version;
 use sha2::{Digest, Sha256};
-use std::fmt;
 use std::future::Future;
-use std::io::Cursor;
-use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
-use std::{env, fs};
+use std::{env, fmt};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use std::{fs, io::Cursor, path::Path};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tempfile::TempDir;
 use thiserror::Error;
@@ -206,6 +205,7 @@ where
 
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
+            let _ = archive;
             Err(UpdateError::UnsupportedOs(env::consts::OS))
         }
     }
@@ -273,6 +273,7 @@ where
 }
 
 pub async fn restart_application() -> Result<(), RestartError> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     let current_exe = env::current_exe()?;
 
     #[cfg(target_os = "windows")]
@@ -292,9 +293,10 @@ pub async fn restart_application() -> Result<(), RestartError> {
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        return Err(RestartError::UnsupportedOs(env::consts::OS));
+        Err(RestartError::UnsupportedOs(env::consts::OS))
     }
 
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::process::exit(0);
 }
 
@@ -407,6 +409,7 @@ fn parse_sha256(sha256: &str) -> Result<[u8; 32], ChecksumError> {
     Ok(bytes)
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn extract_zip<E>(archive: &[u8], extract_to: &Path) -> Result<(), UpdateError<E>>
 where
     E: std::error::Error + Send + Sync + 'static,
