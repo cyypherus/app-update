@@ -5,6 +5,7 @@ members = [
     "app-update-cli",
     "app-update-client",
     "app-update-models",
+    "app-bundler",
 ]
 resolver = "2"
 

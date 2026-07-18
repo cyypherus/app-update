@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      app_name:
+        required: true
+        type: string
+      package:
+        required: true
+        type: string
+      binary:
+        required: true
+        type: string
+      project_path:
+        required: false
+        default: app
+        type: string
+      windows_icon:
+        required: false
+        default: ""
+        type: string
+      platforms:
+        required: false
+        default: macos-arm,macos-intel,windows-x86_64-gnu
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: macos-14
+    environment:
+      name: ${{ inputs.environment }}
+    env:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APP_UPDATE_REPO_TOKEN: ${{ secrets.APP_UPDATE_REPO_TOKEN }}
+      VERSION_SERVER_API_KEY: ${{ secrets.VERSION_SERVER_API_KEY }}
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      DEPLOY_PROD: ${{ inputs.environment == 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ inputs.project_path }}
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: cyypherus/app-update
+          path: app-update
+          ref: main
+          token: ${{ secrets.APP_UPDATE_REPO_TOKEN }}
+          persist-credentials: false
+
+      - name: Configure git access
+        run: git config --global url."https://x-access-token:${APP_UPDATE_REPO_TOKEN}@github.com/".insteadOf https://github.com/
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,x86_64-pc-windows-gnu
+
+      - name: Install build tools
+        run: |
+          brew install mingw-w64
+          cargo install cargo-bundle
+
+      - name: Import signing certificate
+        run: |
+          test -n "$APPLE_CERTIFICATE_BASE64"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          test -n "$APPLE_TEAM_ID"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD"
+          test -n "$APP_UPDATE_REPO_TOKEN"
+          test -n "$VERSION_SERVER_API_KEY"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Verify release version
+        id: version
+        working-directory: ${{ inputs.project_path }}
+        run: |
+          PACKAGE_VERSION="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "${{ inputs.package }}") | .version')"
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            test "$VERSION" = "$PACKAGE_VERSION"
+          else
+            VERSION="$PACKAGE_VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build and deploy
+        run: |
+          BUNDLER_ARGS=(
+            --project-root "$GITHUB_WORKSPACE/${{ inputs.project_path }}"
+            --package "${{ inputs.package }}"
+            --binary "${{ inputs.binary }}"
+            --app-name "${{ inputs.app_name }}"
+          )
+          if [ -n "${{ inputs.windows_icon }}" ]; then
+            BUNDLER_ARGS+=(--windows-icon "${{ inputs.windows_icon }}")
+          fi
+          BUNDLER_ARGS+=(--platforms "${{ inputs.platforms }}")
+          if [ "$DEPLOY_PROD" = "true" ]; then
+            BUNDLER_ARGS+=(--upload-prod)
+          fi
+          cargo run --release --manifest-path "$GITHUB_WORKSPACE/app-update/app-bundler/Cargo.toml" -- "${BUNDLER_ARGS[@]}"
