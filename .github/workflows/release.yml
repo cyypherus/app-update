@@ -74,14 +74,44 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-dependencies-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ inputs.project_path }}/target
+            app-update/target
+          key: cargo-target-${{ runner.os }}-${{ runner.arch }}-${{ inputs.package }}-${{ inputs.environment }}-${{ inputs.tag }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-target-${{ runner.os }}-${{ runner.arch }}-${{ inputs.package }}-${{ inputs.environment }}-
+            cargo-target-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache cargo-bundle
+        id: cargo-bundle-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-bundle
+          key: cargo-bundle-0.9.0-${{ runner.os }}-${{ runner.arch }}
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin,x86_64-pc-windows-gnu
 
-      - name: Install build tools
-        run: |
-          brew install mingw-w64
-          cargo install cargo-bundle
+      - name: Install cross-compile tools
+        run: brew install mingw-w64
+
+      - name: Install cargo-bundle
+        if: steps.cargo-bundle-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-bundle --version 0.9.0 --locked
 
       - name: Import signing certificate
         run: |
