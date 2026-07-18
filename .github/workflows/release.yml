@@ -38,8 +38,6 @@ on:
         required: true
       APPLE_APP_SPECIFIC_PASSWORD:
         required: true
-      APP_UPDATE_REPO_TOKEN:
-        required: true
       VERSION_SERVER_API_KEY:
         required: true
 
@@ -57,7 +55,6 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APP_UPDATE_REPO_TOKEN: ${{ secrets.APP_UPDATE_REPO_TOKEN }}
       VERSION_SERVER_API_KEY: ${{ secrets.VERSION_SERVER_API_KEY }}
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       DEPLOY_PROD: ${{ inputs.environment == 'production' }}
@@ -72,7 +69,6 @@ jobs:
           repository: cyypherus/app-update
           path: app-update
           ref: main
-          token: ${{ secrets.APP_UPDATE_REPO_TOKEN }}
           persist-credentials: false
 
       - name: Configure git access
@@ -94,7 +90,6 @@ jobs:
           test -n "$APPLE_TEAM_ID"
           test -n "$APPLE_ID"
           test -n "$APPLE_APP_SPECIFIC_PASSWORD"
-          test -n "$APP_UPDATE_REPO_TOKEN"
           test -n "$VERSION_SERVER_API_KEY"
           KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
           CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
