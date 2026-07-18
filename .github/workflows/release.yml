@@ -27,6 +27,21 @@ on:
         required: false
         default: macos-arm,macos-intel,windows-x86_64-gnu
         type: string
+    secrets:
+      APPLE_CERTIFICATE_BASE64:
+        required: true
+      APPLE_CERTIFICATE_PASSWORD:
+        required: true
+      APPLE_TEAM_ID:
+        required: true
+      APPLE_ID:
+        required: true
+      APPLE_APP_SPECIFIC_PASSWORD:
+        required: true
+      APP_UPDATE_REPO_TOKEN:
+        required: true
+      VERSION_SERVER_API_KEY:
+        required: true
 
 permissions:
   contents: read
