@@ -76,16 +76,13 @@ fn main() -> Result<()> {
         && platforms
             .iter()
             .any(|platform| platform.starts_with("macos-"))
+        && apple_credentials_present()
     {
-        if apple_credentials_present() {
-            sign_macos_archives(&project_root, &args.app_name, &platforms, &mut archives)?;
-        }
+        sign_macos_archives(&project_root, &args.app_name, &platforms, &mut archives)?;
     }
 
-    if !args.skip_upload {
-        if env::var_os("VERSION_SERVER_API_KEY").is_some() {
-            upload(&version, &args.app_name, &archives, args.upload_prod)?;
-        }
+    if !args.skip_upload && env::var_os("VERSION_SERVER_API_KEY").is_some() {
+        upload(&version, &args.app_name, &archives, args.upload_prod)?;
     }
 
     Ok(())
