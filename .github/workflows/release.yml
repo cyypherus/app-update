@@ -71,9 +71,6 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Configure git access
-        run: git config --global url."https://x-access-token:${APP_UPDATE_REPO_TOKEN}@github.com/".insteadOf https://github.com/
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin,x86_64-pc-windows-gnu
