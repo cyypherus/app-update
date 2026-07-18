@@ -4,7 +4,7 @@ main = "build/worker/shim.mjs"
 compatibility_date = "2024-01-01"
 
 [build]
-command = "cargo install -q worker-build@^0.1 && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true worker-build --release"
+command = "cargo install -q worker-build@0.8.4 && worker-build --release"
 
 [[routes]]
 pattern = "dev.cyypher.com"
