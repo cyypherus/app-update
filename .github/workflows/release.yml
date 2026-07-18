@@ -105,14 +105,12 @@ jobs:
       - name: Verify release version
         id: version
         working-directory: ${{ inputs.project_path }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           PACKAGE_VERSION="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "${{ inputs.package }}") | .version')"
-          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            test "$VERSION" = "$PACKAGE_VERSION"
-          else
-            VERSION="$PACKAGE_VERSION"
-          fi
+          VERSION="${RELEASE_TAG#v}"
+          test "$VERSION" = "$PACKAGE_VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build and deploy
