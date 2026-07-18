@@ -377,11 +377,7 @@ fn sign_macos_archives(
         if !platforms.iter().any(|item| item == platform) {
             continue;
         }
-        let bundle = project_root
-            .join("target")
-            .join(target)
-            .join("release/bundle/osx")
-            .join(format!("{app_name}.app"));
+        let bundle = find_bundle(project_root, target)?;
         sign_and_notarize(&bundle, &identity, &team_id, &apple_id, &app_password)?;
         let archive = zip_bundle(
             &bundle,

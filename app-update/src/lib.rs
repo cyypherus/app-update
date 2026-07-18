@@ -1,11 +1,11 @@
 use semver::Version;
 use sha2::{Digest, Sha256};
 use std::future::Future;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use std::io::Cursor;
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
-use std::{env, fmt};
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-use std::{fs, io::Cursor, path::Path};
+use std::{env, fmt, fs, path::Path};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tempfile::TempDir;
 use thiserror::Error;
@@ -14,7 +14,6 @@ use thiserror::Error;
 pub struct UpdateConfig {
     current_version: Version,
     platform: Platform,
-    macos_bundle_name: Option<String>,
 }
 
 impl UpdateConfig {
@@ -26,20 +25,7 @@ impl UpdateConfig {
         Self {
             current_version,
             platform,
-            macos_bundle_name: None,
         }
-    }
-
-    pub fn with_macos_bundle_name(
-        mut self,
-        macos_bundle_name: impl Into<String>,
-    ) -> Result<Self, UpdateConfigError> {
-        let macos_bundle_name = macos_bundle_name.into().trim().to_string();
-        if macos_bundle_name.is_empty() {
-            return Err(UpdateConfigError::EmptyMacosBundleName);
-        }
-        self.macos_bundle_name = Some(macos_bundle_name);
-        Ok(self)
     }
 }
 
@@ -212,14 +198,14 @@ where
 
     #[cfg(target_os = "windows")]
     async fn install_windows(&self, archive: &[u8]) -> Result<(), UpdateError<A::Error>> {
-        let current_exe = env::current_exe()?;
         let temp_dir = TempDir::new()?;
         extract_zip(archive, temp_dir.path())?;
 
-        let exe_name = current_exe
-            .file_name()
-            .ok_or(UpdateError::MissingExecutableName)?;
-        let new_exe = temp_dir.path().join(exe_name);
+        let new_exe = find_single_payload(temp_dir.path(), "exe").map_err(|error| match error {
+            PayloadSelectionError::Io(error) => UpdateError::Io(error),
+            PayloadSelectionError::Missing => UpdateError::MissingExecutable,
+            PayloadSelectionError::Multiple => UpdateError::MultipleExecutables,
+        })?;
 
         self_replace::self_replace(&new_exe)?;
         fs::remove_file(new_exe)?;
@@ -234,31 +220,17 @@ where
         let temp_dir = TempDir::new()?;
         extract_zip(archive, temp_dir.path())?;
 
-        let bundle_name = self
-            .config
-            .macos_bundle_name
-            .as_deref()
-            .map(Ok)
-            .unwrap_or_else(|| {
-                app_bundle
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .ok_or(UpdateError::MissingAppBundle)
+        let new_app_bundle =
+            find_single_payload(temp_dir.path(), "app").map_err(|error| match error {
+                PayloadSelectionError::Io(error) => UpdateError::Io(error),
+                PayloadSelectionError::Missing => UpdateError::MissingMacosBundle,
+                PayloadSelectionError::Multiple => UpdateError::MultipleMacosBundles,
             })?;
-        let new_app_bundle = temp_dir.path().join(bundle_name);
-        if !new_app_bundle.exists() {
-            return Err(UpdateError::MissingMacosBundle {
-                name: bundle_name.to_string(),
-            });
-        }
 
-        let install_parent = app_bundle
-            .parent()
-            .ok_or(UpdateError::MissingMacosInstallParent)?;
         let output = tokio::process::Command::new("rsync")
             .args(["-a", "--delete"])
-            .arg(&new_app_bundle)
-            .arg(install_parent)
+            .arg(new_app_bundle.join("."))
+            .arg(&app_bundle)
             .output()
             .await?;
 
@@ -338,8 +310,6 @@ pub enum UpdateStatus {
 
 #[derive(Error, Debug)]
 pub enum UpdateConfigError {
-    #[error("macOS bundle name cannot be empty")]
-    EmptyMacosBundleName,
     #[error("unsupported OS: {0}")]
     UnsupportedOs(&'static str),
 }
@@ -382,14 +352,16 @@ where
     Zip(#[from] zip::result::ZipError),
     #[error("archive contains unsafe path: {0}")]
     UnsafeArchivePath(String),
-    #[error("could not determine executable name")]
-    MissingExecutableName,
+    #[error("update archive does not contain an executable")]
+    MissingExecutable,
+    #[error("update archive contains multiple executables")]
+    MultipleExecutables,
     #[error("could not find .app bundle")]
     MissingAppBundle,
-    #[error("update archive does not contain {name}")]
-    MissingMacosBundle { name: String },
-    #[error("could not determine .app install parent")]
-    MissingMacosInstallParent,
+    #[error("update archive does not contain an .app bundle")]
+    MissingMacosBundle,
+    #[error("update archive contains multiple .app bundles")]
+    MultipleMacosBundles,
     #[error("install command failed: {0}")]
     InstallCommandFailed(String),
 }
@@ -407,6 +379,42 @@ fn parse_sha256(sha256: &str) -> Result<[u8; 32], ChecksumError> {
     }
 
     Ok(bytes)
+}
+
+#[derive(Debug)]
+enum PayloadSelectionError {
+    Io(std::io::Error),
+    Missing,
+    Multiple,
+}
+
+fn find_single_payload(
+    extracted_archive: &Path,
+    payload_extension: &str,
+) -> Result<std::path::PathBuf, PayloadSelectionError> {
+    let mut payload = None;
+
+    for entry in fs::read_dir(extracted_archive).map_err(PayloadSelectionError::Io)? {
+        let path = entry.map_err(PayloadSelectionError::Io)?.path();
+        let matches = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case(payload_extension))
+            && match payload_extension {
+                "app" => path.is_dir(),
+                "exe" => path.is_file(),
+                _ => false,
+            };
+
+        if matches {
+            if payload.is_some() {
+                return Err(PayloadSelectionError::Multiple);
+            }
+            payload = Some(path);
+        }
+    }
+
+    payload.ok_or(PayloadSelectionError::Missing)
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -510,14 +518,25 @@ mod tests {
     }
 
     #[test]
-    fn config_rejects_empty_macos_bundle_name() {
-        let result = UpdateConfig::for_platform(Version::new(1, 0, 0), Platform::MacosArm)
-            .with_macos_bundle_name("");
+    fn selects_macos_payload_without_installed_bundle_name() {
+        let extracted_archive = tempfile::tempdir().unwrap();
+        let downloaded_bundle = extracted_archive.path().join("Release.app");
+        fs::create_dir(&downloaded_bundle).unwrap();
 
-        assert!(matches!(
-            result,
-            Err(UpdateConfigError::EmptyMacosBundleName)
-        ));
+        let selected = find_single_payload(extracted_archive.path(), "app").unwrap();
+
+        assert_eq!(selected, downloaded_bundle);
+    }
+
+    #[test]
+    fn selects_windows_payload_without_installed_executable_name() {
+        let extracted_archive = tempfile::tempdir().unwrap();
+        let downloaded_executable = extracted_archive.path().join("release.exe");
+        fs::write(&downloaded_executable, []).unwrap();
+
+        let selected = find_single_payload(extracted_archive.path(), "exe").unwrap();
+
+        assert_eq!(selected, downloaded_executable);
     }
 
     #[test]
